@@ -1,8 +1,9 @@
 # node-cache-manager-fs-binary
+
 Node Cache Manager store for Filesystem with binary data
 ========================================================
 
-The Filesystem store for the [node-cache-manager](https://github.com/BryanDonovan/node-cache-manager) module.
+The Filesystem store for the [node-cache-manager](https://github.com/BryanDonovan/node-cache-manager) module, storing binary data as separate files, returning them as readable streams.
 
 Installation
 ------------
