@@ -130,7 +130,7 @@ DiskStore.prototype.del = function (key, cb) {
         })
         .then(function () {
             // delete the file
-            if (metaData.value.binary && typeof metaData.value.binary === 'Object' && metaData.value.binary != null) {
+            if (metaData.value && metaData.value.binary && typeof metaData.value.binary === 'Object' && metaData.value.binary != null) {
                 // unlink binaries
                 async.forEachOf(metaData.value.binary, function (v, k, cb) {
                     fs.unlink(metaData.value.binary[k], cb);
@@ -138,11 +138,6 @@ DiskStore.prototype.del = function (key, cb) {
                 });
                 return fsp.unlink(metaData.filename);
             } else {
-                // unlink binaries
-                async.forEachOf(metaData.value.binary, function (v, k, cb) {
-                    fs.unlink(metaData.value.binary[k], cb);
-                }, function (err) {
-                });
                 return fsp.unlink(metaData.filename);
             }
         }, function () {
@@ -401,45 +396,60 @@ DiskStore.prototype.get = function (key, options, cb) {
                 }
                 var reviveBuffers = this.options.reviveBuffers;
                 var binaryAsStream = this.options.binaryAsStream;
-                if (this.options.zip) {
-                    zlib.unzip(fileContent, function (err, buffer) {
-                        var diskdata;
-                        if (reviveBuffers) {
-                            diskdata = JSON.parse(buffer, bufferReviver);
-                        } else {
-                            diskdata = JSON.parse(buffer);
-                        }
-                    });
-                }
-                else {
-                    var diskdata;
-                    if (reviveBuffers) {
-                        diskdata = JSON.parse(fileContent, bufferReviver);
-                    } else {
-                        diskdata = JSON.parse(fileContent);
-                    }
-                }
-                if(diskdata.value.binary && diskdata.value.binary != null && typeof diskdata.value.binary == 'Object'){
-                    async.forEachOf(diskdata.value.binary, function(v,k,cb){
-                        diskdata.value.binary[k] = fs.createReadStream(v, {autoClose: true, encoding: 'binary'});
-                        if(binaryAsStream){
-                            cb();
-                        }else{
-                            var bufs = [];
-                            diskdata.value.binary[k].on('data',function(d){ bufs.push(d); });
-                            diskdata.value.binary[k].on('end',function(){
-                                diskdata.value.binary[k] = Buffer.concat(bufs);
-                                cb();
+                var zipOption = this.options.zip;
+                async.waterfall(
+                    [function (seriescb) {
+                        if (zipOption) {
+                            zlib.unzip(fileContent, function (err, buffer) {
+                                var diskdata;
+                                if (reviveBuffers) {
+                                    diskdata = JSON.parse(buffer, bufferReviver);
+                                } else {
+                                    diskdata = JSON.parse(buffer);
+                                }
+                                seriescb(null, diskdata);
                             });
                         }
-                    }, function(err){
-                        if(err)
-                            return cb(err);
-                        cb(null, diskdata.value);
-                    });
-                }else {
-                    cb(null, diskdata.value);
-                }
+                        else {
+                            var diskdata;
+                            if (reviveBuffers) {
+                                diskdata = JSON.parse(fileContent, bufferReviver);
+                            } else {
+                                diskdata = JSON.parse(fileContent);
+                            }
+                            seriescb(null, diskdata);
+                        }
+                    },
+                    function (diskdata, seriescb) {
+                        if (diskdata && diskdata.value && diskdata.value.binary && diskdata.value.binary != null && typeof diskdata.value.binary == 'Object') {
+                            async.forEachOf(diskdata.value.binary, function (v, k, cb) {
+                                diskdata.value.binary[k] = fs.createReadStream(v, {
+                                    autoClose: true,
+                                    encoding: 'binary'
+                                });
+                                if (binaryAsStream) {
+                                    seriescb(null, diskdata.value);
+                                } else {
+                                    var bufs = [];
+                                    diskdata.value.binary[k].on('data', function (d) {
+                                        bufs.push(d);
+                                    });
+                                    diskdata.value.binary[k].on('end', function () {
+                                        diskdata.value.binary[k] = Buffer.concat(bufs);
+                                        seriescb(null, diskdata.value);
+                                    });
+                                }
+                            }, function (err) {
+                                if (err)
+                                    return seriescb(err);
+                                seriescb(null, diskdata.value);
+                            });
+                        } else {
+                            seriescb(null, diskdata.value);
+                        }
+                    }], function(err, result){
+                        cb(err, result);
+                    })
             }.bind(this));
 
         } catch (err) {
@@ -493,7 +503,7 @@ DiskStore.prototype.reset = function (key, cb) {
             }.bind(this),
             function (err) {
                 cb(null);
-            }
+            }.bind(this)
         );
 
     } catch (err) {
@@ -574,7 +584,7 @@ DiskStore.prototype.intializefill = function (cb) {
         // use async to process the files and send a callback after completion
         async.eachSeries(files, function (filename, callback) {
 
-            if(!/\.dat$/.test(filename)){ // only .dat files, no .bin files read
+            if (!/\.dat$/.test(filename)) { // only .dat files, no .bin files read
                 callback();
             }
 
@@ -596,9 +606,9 @@ DiskStore.prototype.intializefill = function (cb) {
                     try {
                         fs.unlinksync(filename);
                         // unlink binary
-                        glob(filename.replace(/\.dat$/,'*.bin'), function(err,result){
-                            if(!err){
-                                async.each(result,fs.unlink);
+                        glob(filename.replace(/\.dat$/, '*.bin'), function (err, result) {
+                            if (!err) {
+                                async.each(result, fs.unlink);
                             }
                         });
                     } catch (ignore) {
