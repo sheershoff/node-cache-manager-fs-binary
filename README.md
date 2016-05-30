@@ -45,7 +45,8 @@ options.path = 'cache/'; // path for cached files
 options.preventfill = false; // prevent filling of the cache with the files from the cache-directory
 options.fillcallback = null; // callback fired after the initial cache filling is completed
 options.zip = false; // if true the cached files will be zipped to save diskspace
-options.bufferReviver = true; // if true buffers are returned from cache as buffers, not objects
+options.reviveBuffers = true; // if true buffers are returned from cache as buffers, not objects
+options.binaryAsStream = true; // if true, data in the binary key are returned as StreamReadable of the binary file with autoclose. You have to do the work for closing the files if you do not read them.
 
 ```
 ## Installation

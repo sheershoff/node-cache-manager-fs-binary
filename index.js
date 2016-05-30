@@ -13,6 +13,8 @@ var async = require('async');
 var extend = require('extend');
 var uuid = require('uuid');
 var zlib = require('zlib');
+var sizeof = require('sizeof');
+var glob = require('glob');
 const gzip = zlib.createGzip();
 
 /**
@@ -128,7 +130,21 @@ DiskStore.prototype.del = function (key, cb) {
         })
         .then(function () {
             // delete the file
-            return fsp.unlink(metaData.filename);
+            if (metaData.value.binary && typeof metaData.value.binary === 'Object' && metaData.value.binary != null) {
+                // unlink binaries
+                async.forEachOf(metaData.value.binary, function (v, k, cb) {
+                    fs.unlink(metaData.value.binary[k], cb);
+                }, function (err) {
+                });
+                return fsp.unlink(metaData.filename);
+            } else {
+                // unlink binaries
+                async.forEachOf(metaData.value.binary, function (v, k, cb) {
+                    fs.unlink(metaData.value.binary[k], cb);
+                }, function (err) {
+                });
+                return fsp.unlink(metaData.filename);
+            }
         }, function () {
             // not found
             cb(null);
@@ -178,6 +194,13 @@ DiskStore.prototype.set = function (key, val, options, cb) {
     // get ttl
     var ttl = (options && (options.ttl || options.ttl === 0)) ? options.ttl : this.options.ttl;
 
+    // move binary data to binary from value
+    var binary;
+    if (typeof val.binary === 'Object' && val.binary != null) {
+        binary = val.binary;
+        delete val['binary'];
+        val.binary = {};
+    }
 
     var metaData = extend({}, new MetaData(), {
         key: key,
@@ -186,9 +209,17 @@ DiskStore.prototype.set = function (key, val, options, cb) {
         filename: this.options.path + '/cache_' + uuid.v4() + '.dat'
     });
 
+    // put storage filenames into stored value.binary object
+    if (binary) {
+        for (var binkey in binary) {
+            if (!binary.hasOwnProperty(binkey)) continue;
+            metaData.value.binary[binkey] = metaData.filename.replace(/\.dat$/, '_' + binkey + '.bin');
+        }
+    }
+
     var stream = JSON.stringify(metaData);
 
-    metaData.size = stream.length;
+    metaData.size = stream.length + sizeof.sizeof(binary);
 
     if (this.options.maxsize && metaData.size > this.options.maxsize) {
         return cb('Item size too big.');
@@ -202,31 +233,55 @@ DiskStore.prototype.set = function (key, val, options, cb) {
             return cb(err);
         }
 
-        // check used space and remove entries if we use to much space
+        // check used space and remove entries if we use too much space
         this.freeupspace(function () {
 
             try {
-                this.zipIfNeeded(stream, function (err, processedStream) {
 
-                    // write data into the cache-file
-                    fs.writeFile(metaData.filename, processedStream, function (err) {
+                var self = this;
+                // write binary data and cache file
+                async.series(
+                    [
+                        function (cb) {
+                            // write binary
+                            if (binary) {
+                                async.forEachOf(binary, function (v, k, cb) {
+                                    fs.writeFile(metaData.value.binary[k], v, cb);
+                                }, function (err) {
+                                    cb(err);
+                                });
+                            } else {
+                                cb();
+                            }
+                        },
+                        function (cb) {
+                            self.zipIfNeeded(stream, function (err, processedStream) {
 
-                        if (err) {
-                            return cb(err);
+                                // write data into the cache-file
+                                fs.writeFile(metaData.filename, processedStream, function (err) {
+
+                                    if (err) {
+                                        return cb(err);
+                                    }
+
+                                    // remove data value from memory
+                                    metaData.value = null;
+                                    delete metaData.value;
+
+                                    self.currentsize += metaData.size;
+
+                                    // place element with metainfos in internal collection
+                                    self.collection[metaData.key] = metaData;
+                                    return cb(null, val);
+
+                                }.bind(self));
+                            }.bind(self))
                         }
-
-                        // remove data value from memory
-                        metaData.value = null;
-                        delete metaData.value;
-
-                        this.currentsize += metaData.size;
-
-                        // place element with metainfos in internal collection
-                        this.collection[metaData.key] = metaData;
-                        return cb(null, val);
-
-                    }.bind(this));
-                }.bind(this));
+                    ],
+                    function (err, result) {
+                        cb(err, result);
+                    }
+                );
 
             } catch (err) {
 
@@ -341,6 +396,7 @@ DiskStore.prototype.get = function (key, options, cb) {
                     return cb(err);
                 }
                 var reviveBuffers = this.options.reviveBuffers;
+                var binaryAsStream = this.options.binaryAsStream;
                 if (this.options.zip) {
                     zlib.unzip(fileContent, function (err, buffer) {
                         var diskdata;
@@ -349,7 +405,6 @@ DiskStore.prototype.get = function (key, options, cb) {
                         } else {
                             diskdata = JSON.parse(buffer);
                         }
-                        cb(null, diskdata.value);
                     });
                 }
                 else {
@@ -359,6 +414,26 @@ DiskStore.prototype.get = function (key, options, cb) {
                     } else {
                         diskdata = JSON.parse(fileContent);
                     }
+                }
+                if(diskdata.value.binary && diskdata.value.binary != null && typeof diskdata.value.binary == 'Object'){
+                    async.forEachOf(diskdata.value.binary, function(v,k,cb){
+                        diskdata.value.binary[k] = fs.createReadStream(v, {autoClose: true, encoding: 'binary'});
+                        if(binaryAsStream){
+                            cb();
+                        }else{
+                            var bufs = [];
+                            diskdata.value.binary[k].on('data',function(d){ bufs.push(d); });
+                            diskdata.value.binary[k].on('end',function(){
+                                diskdata.value.binary[k] = Buffer.concat(bufs);
+                                cb();
+                            });
+                        }
+                    }, function(err){
+                        if(err)
+                            return cb(err);
+                        cb(null, diskdata.value);
+                    });
+                }else {
                     cb(null, diskdata.value);
                 }
             }.bind(this));
@@ -495,6 +570,10 @@ DiskStore.prototype.intializefill = function (cb) {
         // use async to process the files and send a callback after completion
         async.eachSeries(files, function (filename, callback) {
 
+            if(!/\.dat$/.test(filename)){ // only .dat files, no .bin files read
+                callback();
+            }
+
             fs.readFile(filename, function (err, data) {
 
                 // stop file processing when there was an reading error
@@ -512,6 +591,12 @@ DiskStore.prototype.intializefill = function (cb) {
                     // when the deserialize doesn't work, probably the file is uncomplete - so we delete it and ignore the error
                     try {
                         fs.unlinksync(filename);
+                        // unlink binary
+                        glob(filename.replace(/\.dat$/,'*.bin'), function(err,result){
+                            if(!err){
+                                async.each(result,fs.unlink);
+                            }
+                        });
                     } catch (ignore) {
 
                     }
@@ -520,10 +605,10 @@ DiskStore.prototype.intializefill = function (cb) {
                 }
 
                 // update the size in the metadata - this value isn't correctly stored in the file
-                diskdata.size = data.length;
+                // diskdata.size = data.length;
 
                 // update collection size
-                this.currentsize += data.length;
+                this.currentsize += diskdata.size;
 
                 // remove the entrys content - we don't want the content in the memory (only the meta informations)
                 diskdata.value = null;
