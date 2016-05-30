@@ -1,7 +1,9 @@
 var assert = require('chai').assert;
 var store = require('../index.js')
 var fs = require('fs');
+var stream =require('stream');
 var cacheDirectory = 'test/customCache';
+var bufferEqual = require('buffer-equal');
 
 describe('test for the hde-disk-store module', function () {
 
@@ -265,6 +267,78 @@ describe('test for the hde-disk-store module', function () {
             });           
        }) 
     });
+
+	describe('buffers portion', function(){
+
+		it('saves and loads arbitrary buffers with revival', function(done){
+			var s=store.create({options: {zip:true, reviveBuffers: true, path:cacheDirectory, preventfill:true}});
+			var dataBufferArray = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+			var dataKey = 'bufferRevivalTest';
+			var data2Cache = {arbitrary: {testBuffer: Buffer(dataBufferArray)}};
+			s.set(dataKey, data2Cache, function (err) {
+				assert(err === null);
+				s.get(dataKey, function (err, data) {
+					try {
+						assert(err === null);
+						assert(bufferEqual(data2Cache.arbitrary.testBuffer, data.arbitrary.testBuffer) === true);
+						done();
+					}catch(e){
+						done(e);
+					}
+				});
+			});
+		});
+
+		it('saves and loads binary key buffers without revival', function(done){
+			var s=store.create({options: {zip:true, reviveBuffers: false, path:cacheDirectory, preventfill:true}});
+			var dataBufferArray = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+			var dataKey = 'binaryBufferTest';
+			var data2Cache = {binary: {testBuffer: Buffer(dataBufferArray)}};
+			s.set(dataKey, data2Cache, function (err) {
+				assert(err === null);
+				s.get(dataKey, function (err, data) {
+					try {
+						assert(err === null);
+						assert(bufferEqual(data2Cache.binary.testBuffer, data.binary.testBuffer) === true);
+						done();
+					}catch(e){
+						done(e);
+					}
+				});
+			});
+		});
+
+		it('saves binary key buffers and loads as readable stream', function(done){
+			var s=store.create({options: {zip:true, reviveBuffers: false, binaryAsStream: true, path:cacheDirectory, preventfill:true}});
+			var dataBufferArray = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+			var dataKey = 'binaryBufferReadableStreamTest';
+			var data2Cache = {binary: {testBuffer: Buffer(dataBufferArray)}};
+			s.set(dataKey, data2Cache, function (err) {
+				assert(err === null);
+				s.get(dataKey, function (err, data) {
+					try {
+						assert(err === null);
+						assert(data.binary.testBuffer instanceof stream.Readable, 'Should be stream, but ' + typeof data.binary.testBuffer + ' returned');
+						var bufs = [];
+						data.binary.testBuffer.on('data', function (d) {
+							bufs.push(Buffer(d));
+						});
+						data.binary.testBuffer.on('error', function (err) {
+							done(err);
+						});
+						data.binary.testBuffer.on('end', function () {
+							bufs = Buffer.concat(bufs);
+							assert(bufferEqual(data2Cache.binary.testBuffer, bufs) === true);
+							done();
+						});
+					}catch(e){
+						done(e);
+					}
+				});
+			});
+		});
+
+	});
 
 	describe('integrationtests', function () {
 

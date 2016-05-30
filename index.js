@@ -130,7 +130,7 @@ DiskStore.prototype.del = function (key, cb) {
         })
         .then(function () {
             // delete the file
-            if (metaData.value && metaData.value.binary && typeof metaData.value.binary === 'Object' && metaData.value.binary != null) {
+            if (metaData.value && metaData.value.binary && typeof metaData.value.binary === 'object' && metaData.value.binary != null) {
                 // unlink binaries
                 async.forEachOf(metaData.value.binary, function (v, k, cb) {
                     fs.unlink(metaData.value.binary[k], cb);
@@ -210,7 +210,7 @@ DiskStore.prototype.set = function (key, val, options, cb) {
 
     // move binary data to binary from value
     var binary;
-    if (typeof val.binary === 'Object' && val.binary != null) {
+    if (typeof val.binary === 'object' && val.binary != null) {
         binary = val.binary;
         delete val['binary'];
         val.binary = {};
@@ -286,6 +286,12 @@ DiskStore.prototype.set = function (key, val, options, cb) {
 
                                     // place element with metainfos in internal collection
                                     self.collection[metaData.key] = metaData;
+
+                                    // restore val binary key
+                                    if (binary) {
+                                        val.binary = binary;
+                                    }
+
                                     return cb(null, val);
 
                                 }.bind(self));
@@ -440,22 +446,25 @@ DiskStore.prototype.get = function (key, options, cb) {
                         }
                     },
                     function (diskdata, seriescb) {
-                        if (diskdata && diskdata.value && diskdata.value.binary && diskdata.value.binary != null && typeof diskdata.value.binary == 'Object') {
+                        if (diskdata && diskdata.value && diskdata.value.binary && diskdata.value.binary != null && typeof diskdata.value.binary == 'object') {
                             async.forEachOf(diskdata.value.binary, function (v, k, cb) {
                                 diskdata.value.binary[k] = fs.createReadStream(v, {
                                     autoClose: true,
                                     encoding: 'binary'
                                 });
                                 if (binaryAsStream) {
-                                    seriescb(null, diskdata.value);
+                                    cb();
                                 } else {
                                     var bufs = [];
                                     diskdata.value.binary[k].on('data', function (d) {
-                                        bufs.push(d);
+                                        bufs.push(Buffer(d));
+                                    });
+                                    diskdata.value.binary[k].on('error', function (err) {
+                                        cb(err);
                                     });
                                     diskdata.value.binary[k].on('end', function () {
                                         diskdata.value.binary[k] = Buffer.concat(bufs);
-                                        seriescb(null, diskdata.value);
+                                        cb();
                                     });
                                 }
                             }, function (err) {
@@ -604,7 +613,7 @@ DiskStore.prototype.intializefill = function (cb) {
         async.eachSeries(files, function (filename, callback) {
 
             if (!/\.dat$/.test(filename)) { // only .dat files, no .bin files read
-                callback();
+                return callback();
             }
 
             fs.readFile(filename, function (err, data) {
