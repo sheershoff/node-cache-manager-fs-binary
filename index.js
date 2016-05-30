@@ -15,6 +15,7 @@ var uuid = require('uuid');
 var zlib = require('zlib');
 var sizeof = require('sizeof');
 var glob = require('glob');
+var streamifier = require('streamifier');
 const gzip = zlib.createGzip();
 
 /**
@@ -289,7 +290,15 @@ DiskStore.prototype.set = function (key, val, options, cb) {
 
                                     // restore val binary key
                                     if (binary) {
-                                        val.binary = binary;
+                                        if(this.options.binaryAsStream) {
+                                            for(key in binary){
+                                                if(binary.hasOwnProperty(key)){
+                                                    val.binary[key] = streamifier.createReadStream(binary[key], {encoding: null});
+                                                }
+                                            }
+                                        }else{
+                                            val.binary = binary;
+                                        }
                                     }
 
                                     return cb(null, val);

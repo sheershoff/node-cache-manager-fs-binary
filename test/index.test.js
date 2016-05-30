@@ -319,6 +319,7 @@ describe('test for the hde-disk-store module', function () {
 					try {
 						assert(err === null);
 						assert(data.binary.testBuffer instanceof stream.Readable, 'Should be stream, but ' + typeof data.binary.testBuffer + ' returned');
+						assert(data2Cache.binary.testBuffer instanceof stream.Readable, 'Should be stream, but ' + typeof data2Cache.binary.testBuffer + ' returned');
 						var bufs = [];
 						data.binary.testBuffer.on('data', function (d) {
 							bufs.push(Buffer(d));
@@ -328,8 +329,18 @@ describe('test for the hde-disk-store module', function () {
 						});
 						data.binary.testBuffer.on('end', function () {
 							bufs = Buffer.concat(bufs);
-							assert(bufferEqual(data2Cache.binary.testBuffer, bufs) === true);
-							done();
+							var bufs2 = [];
+							data2Cache.binary.testBuffer.on('data', function (d) {
+								bufs2.push(Buffer(d));
+							});
+							data2Cache.binary.testBuffer.on('error', function (err) {
+								done(err);
+							});
+							data2Cache.binary.testBuffer.on('end', function () {
+								bufs2 = Buffer.concat(bufs2);
+								assert(bufferEqual(bufs2, bufs) === true);
+								done();
+							});
 						});
 					}catch(e){
 						done(e);
