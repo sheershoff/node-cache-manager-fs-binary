@@ -175,6 +175,25 @@ DiskStore.prototype.zipIfNeeded = function (data, cb) {
 }
 
 /**
+ * zip an input string if options want that
+ */
+DiskStore.prototype.unzipIfNeeded = function (data, cb) {
+    if (this.options.zip) {
+        zlib.unzip(data, function (err, buffer) {
+            if (!err) {
+                cb(null, buffer);
+            }
+            else {
+                cb(err, null);
+            }
+        });
+    }
+    else {
+        cb(null, data);
+    }
+}
+
+/**
  * set a key into the cache
  */
 DiskStore.prototype.set = function (key, val, options, cb) {
@@ -594,54 +613,57 @@ DiskStore.prototype.intializefill = function (cb) {
                 if (err) {
                     return callback();
                 }
-
-                try {
-
-                    // get the json out of the data
-                    var diskdata = JSON.parse(data);
-
-                } catch (err) {
-
-                    // when the deserialize doesn't work, probably the file is uncomplete - so we delete it and ignore the error
+                this.unzipIfNeeded(data, function(err,data) {
                     try {
-                        fs.unlinksync(filename);
-                        // unlink binary
-                        glob(filename.replace(/\.dat$/, '*.bin'), function (err, result) {
-                            if (!err) {
-                                async.each(result, fs.unlink);
-                            }
-                        });
-                    } catch (ignore) {
+                        if(err){ // if unzippable - throw to remove
+                            throw Error('unzippable: ' + err);
+                        }
+                        // get the json out of the data
+                        var diskdata = JSON.parse(data);
 
-                    }
+                    } catch (err) {
 
-                    return callback();
-                }
+                        // when the deserialize doesn't work, probably the file is uncomplete - so we delete it and ignore the error
+                        try {
+                            fs.unlinksync(filename);
+                            // unlink binary
+                            glob(filename.replace(/\.dat$/, '*.bin'), function (err, result) {
+                                if (!err) {
+                                    async.each(result, fs.unlink);
+                                }
+                            });
+                        } catch (ignore) {
 
-                // update the size in the metadata - this value isn't correctly stored in the file
-                // diskdata.size = data.length;
-
-                // update collection size
-                this.currentsize += diskdata.size;
-
-                // remove the entrys content - we don't want the content in the memory (only the meta informations)
-                diskdata.value = null;
-                delete diskdata.value;
-
-                // and put the entry in the store
-                this.collection[diskdata.key] = diskdata;
-
-                // check for expiry - in this case we instantly delete the entry
-                if (diskdata.expires < new Date()) {
-
-                    this.del(diskdata.key, function () {
+                        }
 
                         return callback();
-                    });
-                } else {
+                    }
 
-                    return callback();
-                }
+                    // update the size in the metadata - this value isn't correctly stored in the file
+                    // diskdata.size = data.length;
+
+                    // update collection size
+                    this.currentsize += diskdata.size;
+
+                    // remove the entrys content - we don't want the content in the memory (only the meta informations)
+                    diskdata.value = null;
+                    delete diskdata.value;
+
+                    // and put the entry in the store
+                    this.collection[diskdata.key] = diskdata;
+
+                    // check for expiry - in this case we instantly delete the entry
+                    if (diskdata.expires < new Date()) {
+
+                        this.del(diskdata.key, function () {
+
+                            return callback();
+                        });
+                    } else {
+
+                        return callback();
+                    }
+                }.bind(this));
             }.bind(this));
 
         }.bind(this), function (err) {

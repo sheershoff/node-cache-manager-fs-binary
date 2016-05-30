@@ -293,6 +293,31 @@ describe('test for the hde-disk-store module', function () {
 			});
 		});
 
+		it('cache initialization on start with zip option', function (done) {
+			// create store
+			var s=store.create({options: {path:cacheDirectory, zip: true, preventfill:true}});
+			// save element
+			s.set('RestoreDontSurvive', 'data', {ttl:-1}, function (err) {
+				assert(err === null);
+				s.set('RestoreTest','test', function (err)
+				{
+					var t=store.create({options: {path:cacheDirectory, zip: true, fillcallback: function () {
+						//fill complete
+						t.get('RestoreTest', function (err, data) {
+							assert(data === 'test');
+							t.get('RestoreDontSurvive', function (err,data) {
+								assert(err === null);
+								assert(data === null);
+								assert(s.currentsize > 0, 'current size not correctly initialized - '+s.currentsize);
+								done();
+							});
+						});
+					}
+					}});
+				});
+			});
+		});
+
 		it('max size option', function (done) {
 
 			// create store
