@@ -29,6 +29,8 @@ Here are examples that demonstrate how to implement the Filesystem cache store.
 
 ```javascript
 
+    var streamifier = require('streamifier');
+    var Stream = require('stream');
     // node cachemanager
     var cacheManager = require('cache-manager');
     // storage for the cachemanager
@@ -53,12 +55,18 @@ Here are examples that demonstrate how to implement the Filesystem cache store.
     function(err, result){ // do your work on the cached or freshly generated and cached value
         // Note, that result.binary.image may come in original form or returned from cache form.
         // While the former is up to you, the latter could be as buffer or readable stream, depending on the settings
-        res.send(result.binary.image);
+        
+        res.writeHead(200, {'Content-Type': 'image/jpeg'});
+        var image = (result.binary.image instanceof Stream.Readable)?result.binary.image:streamifier.createReadStream(result.binary.image, {encoding: null});
+        
+        image.pipe(res);
         
         var usedStreams = ['image'];
         // you have to do the work to close the unused files to prevent file descriptors leak
         for(var key in result.binary){
-            if(!)
+            if(usedStreams.indexOf(key)<0 && result.binary[key] instanceof Stream.Readable){
+                result.binary[key].close();
+            }
         }
     }
     )

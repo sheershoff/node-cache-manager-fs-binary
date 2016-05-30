@@ -450,7 +450,7 @@ DiskStore.prototype.get = function (key, options, cb) {
                             async.forEachOf(diskdata.value.binary, function (v, k, cb) {
                                 diskdata.value.binary[k] = fs.createReadStream(v, {
                                     autoClose: true,
-                                    encoding: 'binary'
+                                    encoding: null
                                 });
                                 if (binaryAsStream) {
                                     cb();
