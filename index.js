@@ -122,19 +122,26 @@ DiskStore.prototype.del = function (key, cb) {
         return cb(null);
     }
     // check for existance of the file
-    fsp.exists(metaData.filename).
-        then(function (exists) {
-            if (exists) {
+    fsp.readFile(metaData.filename, { encoding : 'ascii' }).
+        then(function(metaExtraContent) {
+            // delete the files
+            if (! metaExtraContent) {
+                reject();
                 return;
             }
-            reject();
-        })
-        .then(function () {
-            // delete the file
-            if (metaData.value && metaData.value.binary && typeof metaData.value.binary === 'object' && metaData.value.binary != null) {
+
+            try {
+                var metaExtra = JSON.parse(metaExtraContent);
+            }
+            catch(e) {
+                reject();
+                return;
+            }
+
+            if (metaExtra.value && metaExtra.value.binary && typeof metaExtra.value.binary === 'object' && metaExtra.value.binary != null) {
                 // unlink binaries
-                async.forEachOf(metaData.value.binary, function (v, k, cb) {
-                    fs.unlink(metaData.value.binary[k], cb);
+                async.forEachOf(metaExtra.value.binary, function (v, k, cb) {
+                    fs.unlink(metaExtra.value.binary[k], cb);
                 }, function (err) {
                 });
                 return fsp.unlink(metaData.filename);
