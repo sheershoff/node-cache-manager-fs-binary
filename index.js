@@ -7,7 +7,6 @@ var noop = function () {
 };
 var fs = require("fs");
 var fsp = require("fs-promise");
-var crypto = require('crypto');
 var path = require('path');
 var async = require('async');
 var extend = require('extend');
@@ -15,7 +14,6 @@ var uuid = require('uuid');
 var zlib = require('zlib');
 var glob = require('glob');
 var streamifier = require('streamifier');
-const gzip = zlib.createGzip();
 
 /**
  * Export 'DiskStore'
