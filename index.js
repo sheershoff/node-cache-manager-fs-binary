@@ -13,7 +13,6 @@ var async = require('async');
 var extend = require('extend');
 var uuid = require('uuid');
 var zlib = require('zlib');
-var sizeof = require('sizeof');
 var glob = require('glob');
 var streamifier = require('streamifier');
 const gzip = zlib.createGzip();
@@ -235,20 +234,24 @@ DiskStore.prototype.set = function (key, val, options, cb) {
         filename: this.options.path + '/cache_' + uuid.v4() + '.dat'
     });
 
-    // put storage filenames into stored value.binary object
+    var binarySize = 0;
+
     if (binary) {
         for (var binkey in binary) {
             if (!binary.hasOwnProperty(binkey)) continue;
+            // put storage filenames into stored value.binary object
             metaData.value.binary[binkey] = metaData.filename.replace(/\.dat$/, '_' + binkey + '.bin');
+            // calculate the size of the binary data
+            binarySize += binary[binkey].length || 0;
         }
     }
 
+    metaData.size = JSON.stringify(metaData).length + binarySize;
+
     var stream = JSON.stringify(metaData);
 
-    metaData.size = stream.length + sizeof.sizeof(binary);
-
     if (this.options.maxsize && metaData.size > this.options.maxsize) {
-        return cb('Item size too big.');
+        return cb(new Error('Item size too big.'));
     }
 
 
