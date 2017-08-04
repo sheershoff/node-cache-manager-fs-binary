@@ -415,11 +415,11 @@ describe('test for the hde-disk-store module', function () {
 			});
 
 			s.set('one', 'dataone', {}, function (err, val) {
-				assert(err === 'Item size too big.');
+				assert(err.message === 'Item size too big.');
 				assert(Object.keys(s.collection).length === 0);
 
 				s.set('x', 'x', { ttl: -1 }, function (err, val) {
-					assert(err === 'Item size too big.');
+					assert(err.message === 'Item size too big.');
 					assert(Object.keys(s.collection).length === 0);
 
 					s.options.maxsize = 150;
