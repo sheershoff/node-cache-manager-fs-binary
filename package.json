@@ -1,6 +1,6 @@
 {
   "name": "cache-manager-fs-binary",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "file system store for node cache manager with binary data as files",
   "keywords": [
     "cache-manager",
