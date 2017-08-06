@@ -1,3 +1,4 @@
+[![NPM](https://nodei.co/npm/cache-manager-fs-binary.png)](https://nodei.co/npm/cache-manager-fs-binary/)
 [![Build Status](https://api.travis-ci.org/sheershoff/node-cache-manager-fs-binary.png)](https://travis-ci.org/sheershoff/node-cache-manager-fs-binary)
 
 # node-cache-manager-fs-binary
