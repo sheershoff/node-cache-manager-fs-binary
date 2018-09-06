@@ -123,7 +123,7 @@ DiskStore.prototype.del = function (key, options, cb) {
         return cb(null);
     }
     // check for existance of the file
-    fsp.readFile(metaData.filename, { encoding : 'ascii' }).
+    fsp.readFile(metaData.filename).
         then(function(metaExtraContent) {
             // delete the files
             if (! metaExtraContent) {
